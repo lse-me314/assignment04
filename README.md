@@ -8,7 +8,7 @@ No special resources for this topic beyond the ones already listed on the course
 
 ### Assignment
 
-Work with the file [me314-assignment4-LASTNAME-FIRSTNAME.Rmd](me314-assignment4-LASTNAME-FIRSTNAME.Rmd).
+Work with the file [ME314_assignment4_LASTNAME_FIRSTNAME.Rmd](ME314_assignment4_LASTNAME_FIRSTNAME.Rmd).
 
 This is a fairly long and ambitious assignment, so feel free to work on on Friday (when there is no class) as well.  The TAs will spend a large amount of time on this today in class.
 
