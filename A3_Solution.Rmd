@@ -8,7 +8,12 @@
 ### 1. Normalizing data
 
 This question uses this table:
-![Not normalized data](http://www.essentialsql.com/wp-content/uploads/2014/06/Intro-Table-Not-Normalized.png)
+
+   | EmployeeID | SalesPerson | SalesOffice | OfficeNumber | Customer1 | Customer2 | Customer3 |
+   |-------:|:-------------:|:----------:|:------------ |:-------:|:------:|:------:|
+   | 1003   | Mary Smith    |  Chicago   | 312-555-1212 | Ford   | GM |       |
+   | 1004   | John Hunt     |  New York  | 212-555-1212 | Dell   | HP | Apple |
+   | 1005   | Martin Hap    |  Chicago   | 312-555-1212 | Boeing |    |       |
 
 from the lecture notes.  For each answer, please explain as fully as possible, and feel free to use tables or diagrams if you prefer.
 
@@ -24,18 +29,73 @@ a)  Why does this table violate the first normal form, and what would be require
 
 **We could solve this by moving the Customer information to its own table, and linking its primary key to a matching foreign key in the original table related to SalesStaff.**
 
-**See [this website](https://www.essentialsql.com/get-ready-to-learn-sql-8-database-first-normal-form-explained-in-simple-english/) for more details.**
+**Employee table:**
 
-b)  What additional steps would be needed to make the table 2NF, and why?
+- **Primary key = EmployeeID**
+
+   | EmployeeID | SalesPerson | SalesOffice | OfficeNumber |
+   |-------:|:-------------:|:----------:|:-------------|
+   | 1003   | Mary Smith    |  Chicago   | 312-555-1212 |
+   | 1004   | John Hunt     |  New York  | 212-555-1212 |
+   | 1005   | Martin Hap    |  Chicago   | 312-555-1212 |
+
+**Customer table:**
+
+- **Primary key = Customer**
+- **Foreign key = EmployeeID**
+
+   | Customer | EmployeeID | 
+   |:--------:|------:|
+   | Ford     | 1003  | 
+   | GM       | 1003  | 
+   | Dell     | 1004  | 
+   | HP       | 1004  | 
+   | Apple    | 1004  | 
+   | Boeing   | 1005  | 
+
+b)  What additional steps would be needed to make the table 2NF? What about 3NF?
 
 **A table is in 2nd Normal Form if:**
--  **The table is in 1st normal form, and**
--  **All the non-key columns are dependent on the table’s primary key.**
 
-**We know that the tables are not in 1NF, but assuming that we had fixed that, there would still issues, for example, the `SalesStaff` table has two columns that do not depend on the EmployeeID:  `SalesOffice` and `OfficeNumber`.  We would better creating a separate table for Sales offices, and linking its primary key to the `SalesStaff` table via a matching foreign key in the `SalesStaff` table.**
+- **The table is in 1st normal form, and**
+- **All the non-key columns are 'dependent' on the table’s primary key (and not a subset of the table's primary key).**
 
-**There are other potential issues that wherein, depending on how you achieved the 1NF step, there could still be table attributes that do not completely rely on that tables's primary key.  For more examples, see [here](https://www.essentialsql.com/get-ready-to-learn-sql-10-database-second-normal-form-explained-in-simple-english/).**
+**To achieve this, remove data that is only dependent on part of the primary key. If the candidate key comprises of only single attribute and relation is in 1NF then it is already in 2NF.**
 
+**Let's work with the solution to (a). Since we do not have a compound key, it is automatically in 2NF.**
+
+**However, it is not in 3NF. A table is in 3rd Normal Form if:**
+
+1. **It is in second normal form (2NF).**
+2. **No non-prime attribute is transitively dependent on prime key attribute.**
+
+**We have established that condition 1 holds. What about condition 2? An attribute Y is dependent on an attribute X if knowing X is sufficient to know Y. So for example, if we know the EmployeeID in the Employee table, we will be able to identify the SalesPerson. For more information on this concept of 'dependency', see this tutorial:** https://www.tutorialspoint.com/dbms/database_normalization.htm
+
+**A transitive dependency is one that goes through another attribute. For example, if we know the EmployeeID, we will be able to identify the OfficeNumber; and if we know the OfficeNumber, we will be able to identify the SalesOffice (so, EmployeeID -> OfficeNumber -> SalesOffice). Where this is present (and the table is also in 2NF) there is likely to be redundant data duplication.**
+
+**Since a transitive dependency is present in the employee table, the employee table violates 3NF. We could fix this by removing the SalesOffice column from the employee table and creating a separate Office table, where OfficeNumber is the primary key (and SalesOffice is a non-key attribute).**
+
+**3NF Employee table:**
+
+- **Primary key = EmployeeID**
+- **Foreign key = OfficeNumber**
+
+   | EmployeeID | SalesPerson | OfficeNumber |
+   |-------:|:----------------|:-------------|
+   | 1003   | Mary Smith      | 312-555-1212 |
+   | 1004   | John Hunt       | 212-555-1212 |
+   | 1005   | Martin Hap      | 312-555-1212 |
+
+**3NF Office table:**
+
+- **Primary key = OfficeNumber**
+
+   | OfficeNumber  | SalesOffice |
+   |--------------:|:------------|
+   | 212-555-1212  | New York    |
+   | 312-555-1212  | Chicago     |
+
+**Having normalized the data in this way, we have now minimised the amount of data duplication, therefore reducing the memory required to store the data and making it easier to update information. For example, if for some reason the Chicago office (i.e. the office with OfficeNumber: 312-555-1212) relocated to Houston, we now just update one cell in the Office table - whereas in the original table we would have needed to update two cells.**
 
 c)  Why might we not want to normalize data to the fullest extent possible?
 
@@ -56,57 +116,77 @@ d)  In the table below, which of the three normalization rules does this violate
 
 **Yes:**  
 -  **1NF is violated because because `countryName` contains multiple country values in the last row.**
--  **2NF is violated because we could have created a table of EU membership statuses (including soon, sadly, un-joining) that would link to the Country table via `CountryID`.**
--  **3NF is violates because the `EUmember` can be determined by whether the `EUjoindate` is not `NULL`.**
+-  **3NF is violates because the `EUmember` can be determined by whether the `EUjoindate` is not `NULL`. This means there is a transitive dependency (countryID -> EUjoindate -> EUmember).**
 
 e)  What would it take to full (1NF-3NF) normalize this dataset?
 
    Write out these tables, and describe why this meets each of the normal forms.  This is a database of movies watched on NetBricks, a streaming movie service.
 
-   | Name           | Address    |   Movies Rented   |  Salutation  | Category |
-   |:---------------|:-----------|:------------------|:------------:|----------|
-   | Bob Smith      | 1 Houghton Street    | _Star Wars_, _Inception_ |  Dr.   |  Scifi, Scifi |
-   | Pry Ministair  | 10 Downing St     |  _Brexit the Movie_      |  Lady  | Tragedy |
-   | Joe Bloggs     | 8 Myhatt St.      |  _Fast and Furious 6_, _Fast and Furious 7_     | Mr. | Action, Action |
+   | Name           | Address    |   Movies Rented   |  Salutation  | Category | Fiction? |
+   |:---------------|:-----------|:------------------|:------------:|----------|----------|
+   | Bob Smith      | 1 Houghton Street  | _Star Wars_, _Fast and Furious 7_ |  Dr. |  Scifi, Action | Yes, Yes|
+   | Pry Ministair  | 10 Downing St  |  _Brexit: Three Years On_   |  Rt Hon.  | Documentary | No |
+   | Joe Bloggs     | 8 Myhatt St.  |  _The Big Short_, _Star Wars_  | Mr. | Documentary, Scifi | No, Yes |
 
 **Create tables for:**
 
 -  **User, with a `UserID`, which would record the address, and salutation**
--  **Movies, with a `MovieID`**
--  **Categories, with a `CategoryID` linking to the Movies table**
--  **Rental Table, linking to Movies and User tables, with added fields for the date rented**
+-  **Movies, with a `MovieID` and the movie's name**
+-  **Categories, with information about which movie categories are fiction or non-fiction**
+-  **Rental Table, linking to Movies and User tables**
 
 ```{r}
-# create user table
-user_table <- read.csv(textConnection("userid, Name, Address, Salutation
-     1,     Bob Smith, 1 Houghton Street,        Dr.
-     2, Pry Ministair,     10 Downing St,       Lady
-     3,    Joe Bloggs,      8 Myhatt St.,        Mr."),
-     stringsAsFactors = FALSE)
 
-# comma-separated values = CSV
-# we use read.csv() alongside textConnection because of the format being the same as when you read in a CSV file. we could use data.frame() as we did below, but would have to reorder the data as in its current state, it's the same as copy-pasting rows from excel, so it is easier to do it this way. 
+library(tidyverse)
 
+# 1NF...
+# First, separate out values in 'movies rented' and 'category' so that they are atomic:
+# Second, make longer so that each column represents a single attribute
 
-# create movies table
-movie_table <- data.frame(movieid = 1:5,
-                          title = c("Star Wars", "Inception", "Brexit the Movie", 
-                                    "Fast and Furious 6", "Fast and Furious 7"),
-                          categoryid = c(1,1, 2, 3, 3),
-                          stringsAsFactors = FALSE)
+rental_table_1NF <- tribble(
+  ~userID, ~movieID, ~Name, ~Address, ~`Movies Rented`, ~Salutation, ~Category, ~`Fiction?`,
+  #------|---------|------|---------|-----------------|------------|----------|-----------
+  "001",  "1", "Bob Smith", "1 Houghton Street", "Star Wars",  "Dr.", "Scifi", "Yes",
+  "001",  "2", "Bob Smith", "1 Houghton Street", "Fast and Furious 7",  "Dr.", "Action", "Yes",
+  "002",  "3", "Pry Ministair", "10 Downing St", "Brexit: Three Years On",  "Rt Hon.", "Documentary", "No",
+  "003",  "4", "Joe Bloggs", "8 Myhatt St.", "The Big Short",  "Mr.", "Documentary", "No",
+  "003",  "1", "Joe Bloggs", "8 Myhatt St.", "Star Wars",  "Mr.", "Scifi", "Yes"
+)
 
-# create rental table
-rental_table <- data.frame(userid = c(1, 1, 2, 3, 3),
-                           movieid = 1:5)
+# 2NF...
+# Primary key is the conjunction of userID and movieID
+# Name, Address and Salutation are dependent on userID
+# Movies Rented and Category are dependent on movieID
+# We can fix this by creating separate user and movie tables and removing these columns from the main table
 
-# create category table
-category_table <- data.frame(categoryid = 1:3,
-                             genres = c("Scifi", "Tragedy", "Action"),
-                             stringsAsFactors = FALSE)
+rental_table_2NF <- rental_table_1NF %>%
+  select(c(userID, movieID))
+  
+user_table_2NF <- rental_table_1NF %>%
+  select(c(userID, Name, Address, Salutation)) %>%
+  filter(!duplicated(.))
 
-# why stringsAsFactors= FALSE? let's try it with TRUE..
+movie_table_2NF <- rental_table_1NF %>%
+  select(c(movieID, `Movies Rented`, Category, `Fiction?`)) %>%
+  filter(!duplicated(.))
 
-# anytime you have character values in a string you want to make sure you specify FALSE otherwise it will default to TRUE. Now if you have some previous experience with R, note that " The ‘factory-fresh’ default has been TRUE previously but has been changed to FALSE for R 4.0.0."
+# 3NF...
+# There is a transitive dependency in that `Fiction?` can be determined by `Category`
+# We can fix this by separating information about category from information about movies rented
+
+movie_table_3NF <- rental_table_1NF %>%
+  select(c(movieID, `Movies Rented`, Category))
+
+category_table_3NF <- rental_table_1NF %>%
+  select(c(Category, `Fiction?`)) %>%
+  filter(!duplicated(.))
+
+# The other tables meet 2NF already
+
+rental_table_3NF <- rental_table_2NF
+
+user_table_3NF <- user_table_2NF
+
 ```
 
 **Here are the four tables in fully normalized database** 
@@ -116,29 +196,31 @@ category_table <- data.frame(categoryid = 1:3,
 ```{r echo = FALSE, results = 'asis'}
 library("knitr")
 library(dplyr)
-kable(user_table, caption = 'User Table')
+kable(user_table_3NF, caption = 'User Table')
 ```
 
 #### Rental table
 ```{r echo = FALSE, results = 'asis'}
-kable(rental_table, caption = 'Rental Table')
+kable(rental_table_3NF, caption = 'Rental Table')
 ```
 
 #### Movie table
 ```{r echo = FALSE, results = 'asis'}
-kable(movie_table, caption = 'Movie Table')
+kable(movie_table_3NF, caption = 'Movie Table')
 ```
 
 #### Category table
 ```{r echo = FALSE, results = 'asis'}
-kable(category_table, caption = 'Category Table')
+kable(category_table_3NF, caption = 'Category Table')
 ```
 
 **These tables fits to the 3 levels of normalization because**
 
-- **For achieving 1NF, the problem was the multiple rental records in each row. By separating this as the rental table and making each row correspond with a single rental record, this issue is resolved**.
-- **For achieving 2NF, the partial dependency of records on the primary keys would be an issue. This could be an issue if we have both movieid and movie information in rental record because the movie information can be uniquely identified by the movie id. By separating this information into a separate table (i.e. Movie Table), this issue was resolved.**
-- **For achieving 3NF, the tables should not have transitive dependency. Since the movie categories does not have any information other than the titles of categories, this cannot be an issue here unless we have a secondary key of categoryid in addition to the category name, but I created a new table categoryid just in case.**
+- **To achieve 1NF, we need to ensure that every attribute has its own column and all values are atomic. This is met in all the tables displayed.**
+
+- **To achieve 2NF, we need to ensure that after conforming it to 1NF, every non-prime attribute depends on the primary key (and not a subset of the primary key). In the workings above, we first converted the table into 1NF by making a table with a compound primary key composed of userID and movieID. This turned out not to conform to 2NF because some attributes depended on one (rather than both) of the primary attributes. By separating this information into separate tables (i.e. Movie Table and User Table), this issue was resolved.**
+
+- **To achieve 3NF, the tables should not have transitive dependency. Since whether a movie is fiction can be determined by its genre, this is present in the original table (and the intermediate 2NF Movie Table). To resolve this, we moved the information about movie categories into a separate table.**
 
 ### 2.  Reshaping data
 
@@ -147,6 +229,7 @@ For this exercise, we will use the **nycflights13** R package, whose tables have
 a)  Create a subtable of the `flights` data, that departed before 05:53 on 2013-02-28.  How many rows and columns does this subtable have?  
 
 ```{r echo = FALSE}
+
 flights <- read.csv("nycflights13/flights.csv")
 library("dplyr")
 library("lubridate")
@@ -178,7 +261,7 @@ nrow(flights_sub_day)
 
 b)  Merge or join the subtable from a. `flights` data, to produce a result that includes:  
    *  Departure time
-   *  Carrier (two digit code, from `carrier`)
+   *  Carrier (two digit code, from `flights`)
    *  Flight number
    *  Destination airport name (hint: you will need to get this from the `airports` table)  
 
