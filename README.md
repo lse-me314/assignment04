@@ -11,10 +11,3 @@ No special resources for this topic beyond the ones already listed on the course
 Work with the file [ME314_assignment4_LASTNAME_FIRSTNAME.Rmd](ME314_assignment4_LASTNAME_FIRSTNAME.Rmd).
 
 This is a fairly long and ambitious assignment, so feel free to work on on Friday (when there is no class) as well.  The TAs will spend a large amount of time on this today in class.
-
-
-### Solutions
-
-Solution to Assignment 4 as:
-*  [md rendered as html](https://github.com/lse-me314/assignment04/blob/master/ME314_assignment4_solution.md) 
-*  [RMarkdown](ME314_assignment4_solution.Rmd)  
