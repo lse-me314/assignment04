@@ -1,0 +1,466 @@
+---
+title: "Lab 4 - Linear Regression"
+author: "Your name here"
+output: html_document
+---
+
+```{r, include=FALSE,warning=FALSE}
+
+library('broom')
+library('tidyverse')
+
+data('Auto', package = "ISLR2")
+
+```
+
+This assignment is based on the material covered in James et al. We will subsequently open up solutions to the problem sets.
+
+## Exercise 4.1
+
+This question involves the use of multiple linear regression on the `Auto` data set. So load the data set from the `ISLR` package first.
+
+If the following code chunk returns an error, you most likely have to install the `ISLR` package first. Use `install.packages("ISLR2")` if this is the case.
+
+```{r}
+
+data('Auto', package = "ISLR2")
+
+as_tibble(Auto)
+
+```
+
+
+(a) Produce a scatterplot matrix which includes all of the variables in the data set.
+
+We will exclude `origin` as it is not numeric.
+
+```{r}
+
+pairs(Auto[,1:7])
+
+```
+
+(b) Compute the matrix of correlations between the variables using the function `cor()`. You will need to exclude the `name` variable, which is qualitative.
+
+We will also exclude origin.
+
+```{r}
+
+cor(Auto[,1:7])
+
+```
+
+
+(c) Use the `lm()` function to perform a multiple linear regression with `mpg` as the response and all other variables except `name` as the predictors. Use the `summary()` function to print the results. Comment on the output. For instance:
+
+    i. Is there a relationship between the predictors and the response?
+    
+The F-Statistic is statistically significant at all conventional thresholds. This means there is evidence that our model performs better than an intercept only model.
+
+```{r}
+
+linear.model.auto <-
+  Auto %>% 
+  select(-name) %>% 
+  mutate(origin = case_when(origin == 1 ~ 'American',
+                            origin == 2 ~ 'European',
+                            origin == 3 ~ 'Japanese')) %>% 
+  lm(mpg ~ ., data = .)
+
+summary(linear.model.auto)
+
+```
+
+
+
+    ii. Which predictors appear to have a statistically significant relationship to the response?
+    
+Numeric variables such as `displacement`, `weight`, and `year` are statistically significant. European and Japanese made cars also have significantly higher `mpg` than American made cars.
+
+```{r}
+library(broom)
+
+linear.model.auto %>% 
+  tidy() %>% 
+  filter(term != '(Intercept)',
+         p.value < 0.05) %>% 
+  pull(term)
+
+```
+
+    iii. What does the coefficient for the `year` variable suggest?
+    
+Holding all other variables constant, when `year` increases by 1 unit, we predict a 0.78 point increase in `mpg`. 
+
+```{r}
+
+linear.model.auto %>% 
+  tidy() %>% 
+  filter(term == 'year') %>% 
+  pull(estimate)
+
+```
+
+(d) Use the `plot()` function to produce diagnostic plots of the linear regression fit. Comment on any problems you see with the fit. Do the residual plots suggest any unusually large outliers? Does the leverage plot identify any observations with unusually high leverage?
+
+Data point 14 has high leverage yet comparatively not high residual values.
+
+```{r}
+
+par(mfrow = c(2, 2))
+
+plot(linear.model.auto)
+
+Auto[14,]
+
+```
+
+(e) Use the `*` and `:` symbols to fit linear regression models with interaction effects. Do any interactions appear to be statistically significant?
+
+First, let's look at all two-way interactions to see which best fits the data. Don't worry if you can't understand the code yet, this is for the sake of completeness. For simplicity's sake, I will remove `origin`. `combn` helps us develop unique combinations. From there, we turn this information into a data frame and create a formula string. Next, we nest the auto data set so that each formula has it's own data frame. We then build models for each interaction and calculate the r-squared values. It turns out that `weight * year` has the highest r-squared so we will analyse it,
+
+```{r, warning=FALSE}
+
+features <- colnames(Auto)[2:7]
+
+features %>% 
+  combn(m = 2) %>% 
+  t() %>% 
+  as_tibble() %>% 
+  transmute(formula = paste('mpg ~', V1, '*', V2 )) %>% 
+  crossing(nest(Auto)) %>% 
+  mutate(model = map2(.x = formula, .y = data, .f = ~ lm(as.formula(.x), data = .y)),
+         r.squared = map_dbl(.x = model, .f = ~ glance(.x)$r.squared)) %>% 
+  arrange(desc(r.squared))
+
+
+interaction.model <- 
+  Auto %>% 
+  lm(mpg ~ weight * year, data = .) 
+
+summary(interaction.model)
+
+```
+
+We find that the interaction variable is negative and significant. To see what this means, let's create new data looking at `weight` in the years 1970 and 1982. We will also include an "additive" model to use as a comparison. We see that when we only include both variables without an interaction, the slopes for weight at 1970 and 1982 are identical. However, if we include an interaction, we see that the rate at which heavier cars lose efficiency becomes greater in 1982 when compared to 1970.
+
+```{r}
+
+additive.model <-
+  Auto %>% 
+  lm(mpg ~ weight + year, data = .)
+
+crossing(year = c(70, 82),
+         weight = seq(min(Auto$weight), max(Auto$weight), 10)) %>% 
+  bind_cols(.pred_interactive = predict(interaction.model, newdata = .),
+            .pred_additive = predict(additive.model, newdata = .)) %>%
+  pivot_longer(starts_with('.pred'), names_to = 'model', values_to = '.pred') %>% 
+  ggplot(aes(weight, .pred, colour = as.factor(paste0('19',year)))) +
+  facet_wrap(. ~ 
+               str_c(
+                 str_to_sentence(
+                   str_remove(model, '.pred_')
+                   ), ' Model'
+                 )
+             ) +
+  geom_line(linewidth = 1) +
+  theme_minimal() +
+  theme(legend.position = 'bottom') +
+  labs(x = 'Weight', y = 'Predicted MPG', colour = 'Year')
+
+```
+
+(f) Try a few different transformations of the variables, such as $log(X)$, $\sqrt{X}$, $X^2$. Comment on your findings.
+
+Let's try adding a squared term for `displacement`. The regression results suggest that the linear term for `displacement` (a.k.a. `poly(displacement, 2)1`) is negative and significant, as we predicted. However, the squared term for `displacement` (a.k.a. `poly(displacement, 2)2`) is positive and significant. This suggests a $U$ shaped relationship. To see this relationship graphically, let's plot this regression line.
+
+```{r}
+
+poly.model <- 
+  Auto %>% 
+  lm(mpg ~ poly(displacement,2), data = .) 
+
+summary(poly.model)
+
+tibble(displacement = seq(min(Auto$displacement), max(Auto$displacement), 1)) %>% 
+  bind_cols(.pred = predict(poly.model, newdata = .)) %>% 
+  ggplot(aes(displacement, .pred)) +
+  geom_line(size = 1, colour = 'blue') +
+  geom_point(data = Auto, aes(displacement, mpg), alpha = 0.5) +
+  theme_minimal() +
+  labs(x = 'Displacement', y = 'Predicted MPG')
+
+```
+
+## Exercise 4.2
+
+This question should be answered using the `Carseats` dataset from the `ISLR` package. So load the data set from the `ISLR` package first.
+
+```{r}
+data("Carseats", package = "ISLR2")
+```
+
+
+(a) Fit a multiple regression model to predict `Sales` using `Price`,
+`Urban`, and `US`.
+
+```{r}
+
+Carseats %>% 
+  lm(Sales ~ Price + Urban + US, data = .) %>% 
+  summary()
+
+```
+
+
+(b) Provide an interpretation of each coefficient in the model. Be careful -- some of the variables in the model are qualitative!
+
+`Price`: A one-unit increase in price is estimated to have a 0.05 point (or a `r 1000*0.05` seat) decrease in sales, holding all other variables constant. This estimate is statistically significant at all thresholds.
+
+`Urban`: Urban stores are estimated to have a 0.02 point (or a `r 1000*0.02` seat) decrease in sales relative to rural stores, holding all other variables constant. However, this estimate fails to reach conventional levels of statistical significance.
+
+`US`: Stores located in the United States are estimated to have a 1.2 point (or a `r 1000*1.2` seat) increase in sales relative to stores in other countries. This estimate is statistically significant at all thresholds. 
+
+(c) Write out the model in equation form, being careful to handle the qualitative variables properly.
+
+$$ \hat{Sales} = 13.04 - 0.05\:Price - 0.02\:Urban_{\:=\:YES} + 1.2\:US_{\:=\:YES}  $$
+
+(d) For which of the predictors can you reject the null hypothesis $H_0 : \beta_j =0$?
+
+`Price` and `US` are statistically significant at all thresholds.
+
+(e) On the basis of your response to the previous question, fit a smaller model that only uses the predictors for which there is evidence of association with the outcome.
+
+```{r}
+
+Carseats %>% 
+  lm(Sales ~ Price + US, data = .) %>% 
+  summary()
+
+```
+
+(f) How well do the models in (a) and (e) fit the data?
+
+If we compare model summaries, we note two things. $R^2$ values are the same (to 4 decimal places). However adjusted $R^2$ values are slightly higher for (e) when compared to (a).
+
+```{r}
+
+Carseats %>% 
+  lm(Sales ~ Price + Urban + US, data = .) %>% 
+  summary()
+
+Carseats %>% 
+  lm(Sales ~ Price + US, data = .) %>% 
+  summary()
+
+```
+
+(g) Using the model from (e), obtain 95% confidence intervals for the coefficient(s).
+
+We can use the `broom::tidy` function, specifying `conf.int = TRUE`.
+
+```{r}
+
+lm.fit <- 
+  Carseats %>% 
+  lm(Sales ~ Price + US, data = .) 
+
+tidy(lm.fit, conf.int = TRUE)
+
+```
+
+
+(h) Is there evidence of outliers or high leverage observations in the model from (e)?
+
+Taken from the solutions:
+
+```{r}
+
+plot(predict(lm.fit), rstudent(lm.fit))
+
+```
+
+All studentized residuals appear to be bounded by -3 to 3, so no potential outliers are suggested from the linear regression.
+
+```{r}
+
+par(mfrow = c(2, 2))
+plot(lm.fit)
+
+```
+
+There are a few observations that greatly exceed $(p+1)/n$ (``r 3/397``) on the leverage-statistic plot that suggest that the corresponding points have high leverage.
+
+
+## Exercise 4.3 (Optional)
+
+In this exercise you will create some simulated data and will fit simple linear regression models to it. Make sure to use `set.seed(1)` prior to starting part (a) to ensure consistent results.
+
+(a) Using the `rnorm()` function, create a vector, `x`, containing 100 observations drawn from a $N(0,1)$ distribution. This represents a feature, `X`.
+
+```{r}
+set.seed(1)
+
+
+x <- rnorm(100, 0, 1)
+
+```
+
+(b) Using the `rnorm()` function, create a vector, `eps`, containing 100 observations drawn from a $N(0,0.25)$ distribution i.e. a normal distribution with mean zero and variance 0.25.
+
+```{r}
+
+eps <- rnorm(100, 0, 0.25)
+
+```
+
+
+(c) Using `x` and `eps`, generate a vector `y` according to the model
+$$Y = -1 + 0.5X + \epsilon$$
+What is the length of the vector `y`? What are the values of $\beta_0$ and $\beta_1$ in this linear model?
+
+`y` is a vector of equal length to `x` (a.k.a. 100 observations). $\beta_0 = -1$ and $\beta_1 = 0.5$. 
+
+```{r}
+
+y <- -1 + 0.5*x + eps
+
+length(y)
+
+```
+
+
+(d) Create a scatterplot displaying the relationship between `x` and `y`. Comment on what you observe.
+
+There is a clear linear and positive relationship between `x` and `y`.
+
+```{r}
+
+plot(x, y)
+
+```
+
+
+(e) Fit a least squares linear model to predict `y` using `x`. Comment on the model obtained. How do $\hat{\beta}_0$ and $\hat{\beta}_1$ compare to $\beta_0$ and $\beta_1$?
+
+$\hat{\beta}_0$ and $\hat{\beta}_1$ very closely approximate $\beta_0$ and $\beta_1$ but are not quite identical.
+
+```{r}
+
+lm.fit <- lm(y ~ x) 
+
+summary(lm.fit)
+
+```
+
+
+(f) Display the least squares line on the scatterplot obtained in (d). Draw the population regression line on the plot, in a different color. Use the `legend()` command to create an appropriate legend.
+
+The solutions use base R. However, here is how you go about
+
+```{r}
+
+tbl <- tibble(x, y)
+
+sim.data <- tibble(x = seq(min(tbl$x), max(tbl$x), 0.1)) %>% 
+  mutate(OLS = predict(lm.fit, newdata = .),
+         Population = -1 + 0.5*x) %>%
+  pivot_longer(-x, names_to = 'line', values_to = 'estimate')
+
+ggplot() +
+  geom_line(data = sim.data, aes(x, estimate, colour = line, linetype = line), linewidth = 1.25, alpha = 0.75) +
+  geom_point(data = tbl, aes(x = x, y = y)) +
+  theme_minimal() +
+  labs(x = 'X', y = 'Y', colour = 'Regression\nline', linetype = 'Regression\nline')
+  
+```
+
+(g) Now fit a polynomial regression model that predicts $y$ using $x$ and $x^2$. Is there evidence that the quadratic term improves the model fit? Explain your answer.
+
+There is (albeit limited) evidence that adding a polynomial term improves model fit, as evinced by higher adjusted $R^2$ values.
+
+```{r}
+
+summary(lm.fit)
+
+lm(y ~ poly(x, 2)) %>% 
+  summary()
+
+```
+
+(h) - (i) Repeat (a)-(f) after modifying the data generation process in such a way that there is less / more noise in the data. The model should remain the same. You can do this by decreasing the variance of the normal distribution used to generate the error term $\epsilon$ in (b). Describe your results.
+
+To generalise, we can create a loop that comes up with different values for Y based on `eps`. These values are stored in `y.list`. We then convert them to a data frame `y.tbl`. Next, we create simulated data over the full range of `x` and fit an OLS and population model to derive estimates for `y`. We then create a scatter plot, and superimpose our OLS and population model lines, creating different scatter plots for different values of `eps`. From this, we can surmise that higher values of `eps`:
+
+  1) Produce higher variance in the estimation of Y.
+  2) Result in increased deviation of the OLS regression line from the population regression line.
+
+```{r}
+
+set.seed(123)
+
+eps.vec <- list(rnorm(100, 0, 0.025), 
+                rnorm(100, 0, 0.25),
+                rnorm(100, 0, 2.5))
+
+y.list <- list()
+
+for (eps in 1:length(eps.vec)) {
+  
+  y.list[[eps]] <- -1 + 0.5*x + eps.vec[[eps]]
+
+}
+
+y.tbl <-
+  y.list %>% 
+  map(.x = ., .f = ~ as_tibble_col(.x, column_name = 'y')) %>% 
+  set_names(paste('eps =', c(0.01, 0.25, 3))) %>% 
+  bind_rows(.id = 'eps') %>%
+  bind_cols(x = rep(x, 3))
+
+sims <-
+  y.tbl %>% 
+  split(.$eps) %>% 
+  map(.x = ., .f = ~ lm(y ~ x, data = .x), .id = 'eps') %>% 
+  map(.x = ., .f = ~ predict(.x, newdata = tibble(x = seq(min(tbl$x), max(tbl$x), 0.1)))) %>% 
+  map(.x = ., .f = ~ tibble(x = seq(min(tbl$x), max(tbl$x), 0.1), OLS = .x)) %>% 
+  map_dfr(.x = ., .f = ~ mutate(.x, Population = -1 + 0.5*x), .id = 'eps') %>% 
+  pivot_longer(c(OLS, Population), names_to = 'line', values_to = 'estimate')
+
+y.tbl %>% 
+  ggplot() +
+  geom_point(aes(x, y), alpha = 0.5) +
+  geom_line(data = sims, aes(x, estimate, colour = line, linetype = line)) +
+  facet_wrap(. ~ eps) +
+  theme_minimal() +
+  theme(legend.position = 'bottom') +
+  labs(x = 'X', y = 'Y', colour = 'Regression line', linetype = 'Regression line')
+
+
+```
+
+(j) What are the confidence intervals for $\beta_0$ and $\beta_1$ based on the original data set, the noisier data set, and the less noisy data set? Comment on your results.
+
+Let's create a coefficient plot. When `eps` increases, we see that (a) the magnitude of the coefficient estimate deviates from specified values and (b) the precision of the coefficient estimate is reduced.
+
+```{r}
+
+y.tbl %>% 
+  group_by(eps) %>% 
+  nest(data = c(x, y)) %>% 
+  ungroup() %>% 
+  mutate(model = map(.x = data, .f = ~ lm(y ~ x, data = .x)),
+         tidied = map(.x = model, .f = ~ tidy(.x, conf.int = TRUE))) %>% 
+  unnest(tidied) %>% 
+  ggplot(aes(x = estimate, y = term, colour = str_remove(eps, 'eps ='))) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  geom_point(position = position_dodge(width = 1)) +
+  geom_linerange(aes(xmin = conf.low, xmax = conf.high),
+                 position = position_dodge(width = 1)) +
+  theme_minimal() +
+  theme(legend.position = 'bottom') +
+  scale_y_discrete(labels = c(expression(beta[0]), expression(beta[1]))) +
+  labs(x = 'Estimate', y = NULL, colour = 'Epsilon')
+
+```
+
